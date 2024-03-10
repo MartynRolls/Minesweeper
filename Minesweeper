@@ -1,0 +1,182 @@
+from random import randint, choice
+import pygame
+
+
+class Minesweeper:
+    mineLocations = []
+    displayMap = []
+    flagLocations = []
+    uncoveredTiles = []
+    uncoveredTilesCount = 0
+
+    def __init__(self, width, height, mines):
+        self.width = width
+        self.height = height
+        self.uncoveredTilesCount = width * height - mines
+        self.mines = mines
+
+    def gameSetUp(self):
+        # Setting all maps to the size of the game
+        self.mineLocations, self.uncoveredTiles, self.displayMap, self.flagLocations = \
+            ([[False] * self.width for _ in range(self.height)] for _ in range(4))
+
+        # Adding mines to the game
+        for i in range(self.mines):
+            while True:
+                x = randint(0, self.width - 1)
+                y = randint(0, self.height - 1)
+                if not self.mineLocations[y][x]:
+                    self.mineLocations[y][x] = True
+
+                    # Telling neighbor tiles it's there
+                    for i in range(3):
+                        for e in range(3):
+                            X, Y = x - 1 + i, y - 1 + e
+                            if -1 < X < self.width and -1 < Y < self.height:
+                                self.displayMap[Y][X] += 1
+                    break
+
+    def dig(self, x, y):
+        if not self.uncoveredTiles[y][x] and not self.flagLocations[y][x]:
+            self.uncoveredTiles[y][x] = True
+            self.uncoveredTilesCount -= 1
+
+            # Lose Condition
+            if self.mineLocations[y][x]:
+                global lost
+                lost = True
+
+                colour = choice([(250, 50, 210), (180, 50, 250), (50, 180, 250), (250, 50, 50)])
+                addParticles(x, y, 4, colour)
+
+                # Using the display map to keep the colour instead of creating a new list
+                self.displayMap[y][x] = colour
+
+            # If there's no surrounding bombs, we want the adjacent tiles to be dug up.
+            if self.displayMap[y][x] == 0:
+                for i in range(3):
+                    for e in range(3):
+                        X, Y = x - 1 + i, y - 1 + e
+                        if -1 < X < self.width and -1 < Y < self.height:
+                            if self.flagLocations[Y][X]:
+                                self.flag(X, Y)
+                            self.dig(X, Y)
+
+            # Adding particles to look nice
+            colour = (150, 200, 50) if (x + y) % 2 == 0 else (120, 185, 40)
+            addParticles(x, y, 1, colour)
+
+    def flag(self, x, y):
+        # Placing a flag. If I had a sprite, I could have another list for airborne flags, like with
+        # the moving squares, but currently the state is just toggled.
+        self.flagLocations[y][x] = False if self.flagLocations[y][x] else True
+
+    def explodeAll(self): # For the fun of it...
+        for i, row in enumerate(self.mineLocations):
+            for e, tile in enumerate(row):
+                if tile:
+                    if self.flagLocations[i][e]:
+                        self.flag(e, i)
+                    self.dig(e, i)
+
+
+def addParticles(x, y, velocity, colour): # Makes code more readable and saves some bytes
+    for i in range(2):
+        for e in range(2):
+            X, Y = (x + 0.5 * i) * size, (y + 0.5 * e) * size
+            movingSquares.append([X, Y, randint(-25, 25), randint(-16 * velocity, -8 * velocity), colour])
+
+
+movingSquares = []
+
+pygame.init()
+
+Game = Minesweeper(24, 20, 99)
+Game.gameSetUp()
+
+moveOne = True
+countdown = 120
+lost, won = False, False
+
+size = 600 // Game.height
+
+screen = pygame.display.set_mode((Game.width * size, Game.height * size))
+clock = pygame.time.Clock()
+font = pygame.font.Font(None, int(1.5 * size))
+
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+        elif event.type == pygame.MOUSEBUTTONDOWN and not lost:
+            x, y = pygame.mouse.get_pos()
+            x //= size
+            y //= size
+
+            if event.button == 1:
+                # If the tile has already been dug up, it will check enough flags have been placed, then dig the surrounding tiles.
+                if Game.uncoveredTiles[y][x]:
+                    flags = 0
+                    for i in range(3):
+                        for e in range(3):
+                            X, Y = x - 1 + i, y - 1 + e
+                            if -1 < X < Game.width and -1 < Y < Game.height and Game.flagLocations[Y][X]:
+                                flags += 1
+                    if flags == Game.displayMap[y][x]:
+                        for i in range(3):
+                            for e in range(3):
+                                if -1 < x - 1 + i < Game.width and -1 < y - 1 + e < Game.height:
+                                    Game.dig(x - 1 + i, y - 1 + e)
+
+                # We don't want to die on our first move, so we cycle through different games until we won't.
+                elif moveOne:
+                    moveOne = False
+                    while Game.displayMap[y][x] != 0:
+                        Game.gameSetUp()
+
+                Game.dig(x, y)
+
+                # Win condition
+                if Game.uncoveredTilesCount == 0:
+                    won = True
+
+            elif event.button == 3 and not Game.uncoveredTiles[y][x]:
+                Game.flag(x, y)
+
+    for i in range(Game.width):
+        for e in range(Game.height):
+            if Game.uncoveredTiles[e][i]:
+                colour = (230, 195, 160) if (i + e) % 2 == 0 else (215, 185, 155)
+            else:
+                colour = (170, 220, 70) if (i + e) % 2 == 0 else (140, 205, 60)
+            pygame.draw.rect(screen, colour, (i * size, e * size, size, size))
+
+            if Game.flagLocations[e][i]:
+                pygame.draw.rect(screen, (200, 10, 10), ((i + 0.25) * size, (e + 0.25) * size, size//2, size//2))
+
+            if Game.uncoveredTiles[e][i] and Game.displayMap[e][i] != 0:
+                if Game.mineLocations[e][i]:
+                    pygame.draw.rect(screen, Game.displayMap[e][i], (i * size, e * size, size, size))
+                else:
+                    text_surface = font.render(str(Game.displayMap[e][i]), True, (255, 255, 255))
+                    screen.blit(text_surface, text_surface.get_rect(center=((i + 0.5) * size, (e + 0.5) * size)))
+
+    for square in movingSquares:
+        pygame.draw.rect(screen, (square[4]), (square[0], square[1], 0.5 * size, 0.5 * size))
+        square[0] += square[2] / 20
+        square[1] += square[3] / 4
+        square[3] += 1
+        if square[1] > 600:
+            movingSquares.remove(square)
+
+    if lost or won:
+        countdown -= 1
+        if countdown == 0:
+            Game.explodeAll()
+
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()

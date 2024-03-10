@@ -2,6 +2,7 @@ from random import randint, choice
 import pygame
 
 
+# Minesweeper class for the main game
 class Minesweeper:
     mineLocations = []
     displayMap = []

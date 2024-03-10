@@ -1,3 +1,5 @@
+## Minesweeper with pythons Pygame library
+
 I love minesweeper, I love coding, doesn't that just work out brilliantly?
 
 Over the past few weeks I've been working on this adding features to my copy that others have. 
